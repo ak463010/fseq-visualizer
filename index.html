@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FSEQ File Visualizer</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121933;
+      --panel-2: #1a2345;
+      --text: #ebf1ff;
+      --muted: #a6b3d1;
+      --accent: #67b7ff;
+      --accent-2: #8ef0c2;
+      --danger: #ff7f96;
+      --warning: #ffd166;
+      --border: #2c3968;
+      --shadow: 0 10px 30px rgba(0,0,0,.28);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, Segoe UI, Roboto, Arial, sans-serif;
+      background: linear-gradient(180deg, #07101e 0%, #0b1020 100%);
+      color: var(--text);
+    }
+    .app { max-width: 1440px; margin: 0 auto; padding: 24px; }
+    .hero { display: grid; gap: 16px; grid-template-columns: 1.5fr 1fr; margin-bottom: 20px; }
+    .card {
+      background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+    .hero h1 { margin: 0 0 10px; font-size: 32px; line-height: 1.1; }
+    .subtle { color: var(--muted); line-height: 1.5; }
+    .upload-box { display: flex; flex-direction: column; gap: 12px; justify-content: center; }
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      text-align: center;
+      background: rgba(255,255,255,0.02);
+      transition: .2s ease;
+    }
+    .dropzone.dragover { border-color: var(--accent); background: rgba(103,183,255,.08); }
+    input[type="file"] { display: none; }
+    .btn, button {
+      background: linear-gradient(180deg, var(--accent) 0%, #4f8dff 100%);
+      color: #08101f;
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: .15s ease;
+    }
+    .btn:hover, button:hover { transform: translateY(-1px); }
+    .btn.secondary, button.secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .selected-file-name {
+      margin-top: 12px;
+      justify-content: center;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: inline-flex;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .stat {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+    }
+    .stat .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+    .stat .value { font-size: 24px; font-weight: 800; margin-top: 6px; }
+    .grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 20px; }
+    .section-card { margin-bottom: 20px; }
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .section-title h2, .section-title h3 { margin: 0; font-size: 20px; }
+    .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+    .field {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(255,255,255,0.025);
+    }
+    .field .name { color: var(--muted); font-size: 12px; }
+    .field .val { margin-top: 5px; font-weight: 700; word-break: break-word; }
+    table {
+      width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 14px; border: 1px solid var(--border);
+    }
+    th, td {
+      padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,.06); text-align: left; vertical-align: top;
+    }
+    th {
+      background: rgba(255,255,255,.04); color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+    }
+    tr:last-child td { border-bottom: 0; }
+    .controls {
+      display: grid; grid-template-columns: 1fr auto auto auto auto; gap: 10px; align-items: center; margin-bottom: 14px;
+    }
+    .range-wrap { display: flex; gap: 10px; align-items: center; }
+    input[type="range"] { width: 100%; }
+    .frame-number-input {
+      width: 90px; padding: 10px; border-radius: 12px; border: 1px solid var(--border); background: #0b1020; color: var(--text);
+    }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: rgba(255,255,255,.03);
+      padding: 6px 10px; border-radius: 999px; color: var(--muted); font-size: 12px; margin-right: 8px; margin-bottom: 8px;
+    }
+    .viewer-options { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+    .inline-select, .inline-number {
+      margin-left: 8px; background: transparent; color: inherit; border: 0; outline: none;
+    }
+    .inline-number { width: 90px; }
+    .frame-grid { gap: 4px; }
+    .frame-grid.heatmap {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(20px, 1fr));
+    }
+    .frame-grid.bars {
+      display: flex; align-items: flex-end; gap: 3px; min-height: 110px; padding-top: 8px; overflow-x: auto; overflow-y: hidden;
+    }
+    .frame-grid.rgb {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+    }
+    .cell {
+      height: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,.08); position: relative; cursor: crosshair; min-width: 20px;
+    }
+    .bar-cell {
+      width: 10px; min-width: 10px; border-radius: 6px 6px 0 0; border: 1px solid rgba(255,255,255,.08); position: relative; cursor: crosshair; flex: 0 0 auto;
+    }
+    .cell:hover::after, .bar-cell:hover::after {
+      content: attr(data-tip); position: absolute; left: 50%; top: -8px; transform: translate(-50%, -100%); white-space: nowrap;
+      background: #07101e; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 12px; z-index: 2; box-shadow: var(--shadow);
+    }
+    .legend { display: flex; gap: 14px; flex-wrap: wrap; margin: 12px 0 8px; color: var(--muted); font-size: 13px; }
+    .legend span::before {
+      content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 4px; margin-right: 6px; vertical-align: -1px; border: 1px solid rgba(255,255,255,.15);
+    }
+    .legend .lz::before { background: rgb(0, 0, 0); }
+    .legend .md::before { background: rgb(80, 140, 255); }
+    .legend .hi::before { background: rgb(118, 255, 183); }
+    .error { color: var(--danger); white-space: pre-wrap; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .small { font-size: 12px; color: var(--muted); }
+    .frame-stats { margin-bottom: 10px; }
+    .empty { border: 1px dashed var(--border); border-radius: 16px; padding: 18px; color: var(--muted); }
+    @media (max-width: 1100px) {
+      .hero, .grid { grid-template-columns: 1fr; }
+      .stats { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 700px) {
+      .app { padding: 14px; }
+      .stats { grid-template-columns: 1fr; }
+      .controls { grid-template-columns: 1fr; }
+      .field-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="hero">
+      <div class="card">
+        <h1>FSEQ File Visualizer</h1>
+        <p class="subtle">
+          Open a Falcon Sequence <span class="mono">.fseq</span> file in your browser and inspect the header, compression blocks,
+          sparse ranges, variables, raw frame bytes, and per-frame channel intensity visualization.
+        </p>
+        <div id="status" class="small">No file loaded.</div>
+      </div>
+      <div class="card upload-box">
+        <div id="dropzone" class="dropzone">
+          <p><strong>Drop an .fseq file here</strong></p>
+          <p class="small">or</p>
+          <label class="btn" for="fileInput">Choose File</label>
+          <input id="fileInput" type="file" accept=".fseq,.eseq,application/octet-stream" />
+          <div id="selectedFileName" class="chip selected-file-name">No file selected</div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <button id="downloadReport" class="secondary">Download JSON Report</button>
+          <label class="btn secondary" for="audioInput">Load Audio</label>
+          <input id="audioInput" type="file" accept="audio/*" />
+        </div>
+        <div id="selectedAudioName" class="chip selected-file-name">No audio selected</div>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="label">Format</div><div id="statFormat" class="value">—</div></div>
+      <div class="stat"><div class="label">Channels</div><div id="statChannels" class="value">—</div></div>
+      <div class="stat"><div class="label">Frames</div><div id="statFrames" class="value">—</div></div>
+      <div class="stat"><div class="label">Step Time</div><div id="statStep" class="value">—</div></div>
+      <div class="stat"><div class="label">FPS</div><div id="statFps" class="value">—</div></div>
+      <div class="stat"><div class="label">Duration</div><div id="statDuration" class="value">—</div></div>
+    </div>
+
+    <div class="grid">
+      <div>
+        <div class="card section-card">
+          <div class="section-title"><h2>Header</h2><span id="headerBadge" class="chip">Waiting for file</span></div>
+          <div id="headerFields" class="field-grid"></div>
+        </div>
+        <div class="card section-card">
+          <div class="section-title"><h2>Data Tables</h2></div>
+          <div style="display:grid;gap:16px;">
+            <div>
+              <h3 style="margin:0 0 8px;">Compression Blocks</h3>
+              <div id="compressionBlocks"></div>
+            </div>
+            <div>
+              <h3 style="margin:0 0 8px;">Sparse Ranges</h3>
+              <div id="sparseRanges"></div>
+            </div>
+            <div>
+              <h3 style="margin:0 0 8px;">Variables</h3>
+              <div id="variables"></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="section-title"><h2>Validation & Notes</h2></div>
+          <div id="validation"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card section-card">
+          <div class="section-title"><h2>Frame Viewer</h2><span id="frameMeta" class="chip">No frame selected</span></div>
+          <div class="controls">
+            <div class="range-wrap">
+              <input id="frameSlider" type="range" min="0" max="0" value="0" disabled />
+            </div>
+            <button id="prevFrame" class="secondary">Prev</button>
+            <button id="playPause" class="secondary">Play</button>
+            <button id="nextFrame" class="secondary">Next</button>
+            <input id="frameNumber" type="number" min="0" value="0" class="frame-number-input" />
+          </div>
+          <div class="viewer-options">
+            <span class="chip">Channels per view:
+              <select id="channelsPerView" class="inline-select">
+                <option>128</option>
+                <option selected>256</option>
+                <option>512</option>
+                <option>1024</option>
+              </select>
+            </span>
+            <span class="chip">Start channel:
+              <input id="channelOffset" type="number" min="0" value="0" class="inline-number" />
+            </span>
+            <span class="chip">Mode:
+              <select id="viewMode" class="inline-select">
+                <option value="heat">Heatmap</option>
+                <option value="bars">Bars</option>
+                <option value="rgb">RGB triplets</option>
+              </select>
+            </span>
+          </div>
+          <div id="syncStatus" class="small" style="margin-bottom:10px;">Playback source: FSEQ only</div>
+          <div class="legend">
+            <span class="lz">Low / 0</span>
+            <span class="md">Medium</span>
+            <span class="hi">High / 255</span>
+          </div>
+          <div id="frameStats" class="small frame-stats">Load a file to inspect frames.</div>
+          <div id="frameGrid" class="frame-grid heatmap"></div>
+        </div>
+        <div class="card">
+          <div class="section-title"><h2>Raw Frame Bytes</h2></div>
+          <div id="rawFrame" class="small mono empty">No frame loaded.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const ui = {
+      fileInput: document.getElementById('fileInput'),
+      dropzone: document.getElementById('dropzone'),
+      status: document.getElementById('status'),
+      headerFields: document.getElementById('headerFields'),
+      headerBadge: document.getElementById('headerBadge'),
+      compressionBlocks: document.getElementById('compressionBlocks'),
+      sparseRanges: document.getElementById('sparseRanges'),
+      variables: document.getElementById('variables'),
+      validation: document.getElementById('validation'),
+      frameSlider: document.getElementById('frameSlider'),
+      frameNumber: document.getElementById('frameNumber'),
+      prevFrame: document.getElementById('prevFrame'),
+      playPause: document.getElementById('playPause'),
+      nextFrame: document.getElementById('nextFrame'),
+      frameGrid: document.getElementById('frameGrid'),
+      frameStats: document.getElementById('frameStats'),
+      rawFrame: document.getElementById('rawFrame'),
+      frameMeta: document.getElementById('frameMeta'),
+      channelsPerView: document.getElementById('channelsPerView'),
+      channelOffset: document.getElementById('channelOffset'),
+      viewMode: document.getElementById('viewMode'),
+      statFormat: document.getElementById('statFormat'),
+      statChannels: document.getElementById('statChannels'),
+      statFrames: document.getElementById('statFrames'),
+      statStep: document.getElementById('statStep'),
+      statFps: document.getElementById('statFps'),
+      statDuration: document.getElementById('statDuration'),
+      downloadReport: document.getElementById('downloadReport'),
+      selectedFileName: document.getElementById('selectedFileName'),
+      audioInput: document.getElementById('audioInput'),
+      selectedAudioName: document.getElementById('selectedAudioName'),
+      syncStatus: document.getElementById('syncStatus')
+    };
+
+    const state = {
+      fileName: null,
+      parsed: null,
+      currentFrame: 0,
+      isPlaying: false,
+      playTimer: null,
+      audioFileName: null,
+      audioUrl: null,
+      audio: null,
+      syncLock: false
+    };
+
+    function readU8(view, offset) { return view.getUint8(offset); }
+    function readU16(view, offset) { return view.getUint16(offset, true); }
+    function readU24(view, offset) { return view.getUint8(offset) | (view.getUint8(offset + 1) << 8) | (view.getUint8(offset + 2) << 16); }
+    function readU32(view, offset) { return view.getUint32(offset, true); }
+    function readU64(view, offset) {
+      const low = BigInt(view.getUint32(offset, true));
+      const high = BigInt(view.getUint32(offset + 4, true));
+      return (high << 32n) | low;
+    }
+    function ascii(bytes) {
+      return Array.from(bytes).map(b => (b >= 32 && b <= 126 ? String.fromCharCode(b) : '.')).join('');
+    }
+    function safeTextDecoder(arr) {
+      try {
+        const trimmed = arr.length && arr[arr.length - 1] === 0 ? arr.slice(0, -1) : arr;
+        return new TextDecoder('utf-8', { fatal: false }).decode(trimmed);
+      } catch {
+        return ascii(arr);
+      }
+    }
+    function formatBytes(n) {
+      if (n < 1024) return n + ' B';
+      if (n < 1024 * 1024) return (n / 1024).toFixed(2) + ' KB';
+      return (n / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+    function formatMaybeMicros(valueBigInt) {
+      try {
+        const ms = Number(valueBigInt / 1000n);
+        if (!Number.isFinite(ms) || ms <= 0) return valueBigInt.toString();
+        const d = new Date(ms);
+        if (Number.isNaN(d.getTime())) return valueBigInt.toString();
+        return valueBigInt.toString() + ' (' + d.toISOString() + ')';
+      } catch {
+        return valueBigInt.toString();
+      }
+    }
+    function formatDuration(ms) {
+      const totalSeconds = ms / 1000;
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = Math.floor(totalSeconds % 60);
+      const milliseconds = Math.round(ms % 1000);
+      if (minutes > 0) return minutes + 'm ' + String(seconds).padStart(2, '0') + 's ' + String(milliseconds).padStart(3, '0') + 'ms';
+      return seconds + 's ' + String(milliseconds).padStart(3, '0') + 'ms';
+    }
+    function compressionName(type) {
+      return ({0:'None',1:'zstd',2:'zlib'})[type] || ('Unknown (' + type + ')');
+    }
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+    function valueColor(v) {
+      const value = Math.max(0, Math.min(255, Number(v) || 0));
+      if (value === 0) return 'rgb(0, 0, 0)';
+      const ratio = value / 255;
+      const r = Math.round(8 + ratio * 110);
+      const g = Math.round(8 + ratio * 247);
+      const b = Math.round(8 + (1 - ratio) * 140);
+      return 'rgb(' + r + ', ' + g + ', ' + b + ')';
+    }
+
+    function parseFSEQ(arrayBuffer, fileName) {
+      const view = new DataView(arrayBuffer);
+      const bytes = new Uint8Array(arrayBuffer);
+      if (bytes.length < 32) throw new Error('File too small. FSEQ header requires at least 32 bytes.');
+
+      const identifier = ascii(bytes.slice(0, 4));
+      const channelDataOffset = readU16(view, 4);
+      const minorVersion = readU8(view, 6);
+      const majorVersion = readU8(view, 7);
+      const headerSize = readU16(view, 8);
+      const channelCount = readU32(view, 10);
+      const frameCount = readU32(view, 14);
+      const stepTime = readU8(view, 18);
+      const flags = readU8(view, 19);
+      const compressionTypeRaw = readU8(view, 20);
+      const compressionBlockCountLow = readU8(view, 21);
+      const sparseRangeCount = readU8(view, 22);
+      const reserved = readU8(view, 23);
+      const uniqueId = readU64(view, 24);
+
+      const compressionType = compressionTypeRaw & 0x0F;
+      const extCompressionBlockCount = (compressionTypeRaw & 0xF0) >> 4;
+      const compressionBlockCount12 = (extCompressionBlockCount << 8) | compressionBlockCountLow;
+      const effectiveCompressionBlockCount = compressionType === 0 ? 0 : compressionBlockCount12;
+
+      let offset = 32;
+      const compressionBlocks = [];
+      for (let i = 0; i < effectiveCompressionBlockCount; i++) {
+        if (offset + 8 > bytes.length) throw new Error('Unexpected EOF while reading compression blocks.');
+        compressionBlocks.push({ index: i, firstFrameNumber: readU32(view, offset), size: readU32(view, offset + 4) });
+        offset += 8;
+      }
+
+      const sparseRanges = [];
+      for (let i = 0; i < sparseRangeCount; i++) {
+        if (offset + 6 > bytes.length) throw new Error('Unexpected EOF while reading sparse ranges.');
+        const startChannel = readU24(view, offset);
+        const endChannelOffset = readU24(view, offset + 3);
+        sparseRanges.push({
+          index: i,
+          startChannel,
+          endChannelOffset,
+          impliedChannelCount: endChannelOffset,
+          inclusiveEndChannel: startChannel + endChannelOffset
+        });
+        offset += 6;
+      }
+
+      const variables = [];
+      while (offset + 4 <= channelDataOffset && offset + 4 <= bytes.length) {
+        const remaining = channelDataOffset - offset;
+        if (remaining < 4) break;
+        const size = readU16(view, offset);
+        const code = ascii(bytes.slice(offset + 2, offset + 4));
+        if (size === 0) {
+          variables.push({ index: variables.length, size: 0, code: 'NULNUL', dataText: '', rawHex: '' });
+          offset += 4;
+          continue;
+        }
+        if (size < 4) {
+          variables.push({ index: variables.length, size, code, dataText: '', rawHex: '', error: 'Invalid variable size (< 4).' });
+          offset += 4;
+          continue;
+        }
+        if (offset + size > bytes.length) {
+          variables.push({ index: variables.length, size, code, dataText: '', rawHex: '', error: 'Variable exceeds file length.' });
+          break;
+        }
+        const data = bytes.slice(offset + 4, offset + size);
+        variables.push({
+          index: variables.length,
+          size,
+          code,
+          dataText: safeTextDecoder(data),
+          rawHex: Array.from(data).map(b => b.toString(16).padStart(2, '0')).join(' ')
+        });
+        offset += size;
+      }
+
+      const alignGap = channelDataOffset - offset;
+      const adjustedOffset = alignGap >= 0 && alignGap <= 4 ? channelDataOffset : offset;
+
+      const filteredCompressionBlocks = compressionBlocks.filter(b => b.size > 0);
+      let relativeCursor = 0;
+      for (const block of filteredCompressionBlocks) {
+        block.relativeStart = relativeCursor;
+        block.relativeEnd = relativeCursor + block.size;
+        relativeCursor += block.size;
+      }
+
+      const frames = [];
+      const notes = [];
+      if (compressionType === 0) {
+        const dataStart = adjustedOffset;
+        const expectedUncompressed = Number(channelCount) * Number(frameCount);
+        const available = bytes.length - dataStart;
+        const safeFrames = Math.min(frameCount, Math.floor(available / Math.max(channelCount, 1)));
+        if (expectedUncompressed > available) notes.push('Uncompressed channel data appears truncated.');
+        for (let frame = 0; frame < safeFrames; frame++) {
+          const start = dataStart + frame * channelCount;
+          const end = start + channelCount;
+          frames.push(bytes.slice(start, end));
+        }
+      } else {
+        notes.push('Compressed channel data detected. Metadata is parsed, but compressed frame decompression is not implemented yet.');
+      }
+
+      const sparseImpliedCount = sparseRanges.reduce((sum, r) => sum + r.impliedChannelCount, 0);
+      const validations = [];
+      if (identifier !== 'PSEQ' && identifier !== 'FSEQ') validations.push({ level:'error', text:'Identifier is ' + identifier + ', expected PSEQ or older FSEQ.' });
+      else validations.push({ level:'ok', text:'Identifier ' + identifier + ' looks valid.' });
+      validations.push({ level: majorVersion === 2 ? 'ok' : 'warn', text:'Major version = ' + majorVersion + '. Documentation expects version 2.' });
+      validations.push({ level: headerSize <= channelDataOffset ? 'ok' : 'warn', text:'Header size = ' + headerSize + ', channel data offset = ' + channelDataOffset + '.' });
+      if (sparseRangeCount > 0) validations.push({ level: sparseImpliedCount === channelCount ? 'ok' : 'warn', text:'Sparse ranges imply ' + sparseImpliedCount + ' channels; header reports ' + channelCount + '.' });
+      notes.forEach(n => validations.push({ level:'warn', text:n }));
+
+      const fps = stepTime > 0 ? 1000 / stepTime : 0;
+      const durationMs = frameCount * stepTime;
+
+      return {
+        fileName,
+        fileSize: bytes.length,
+        header: {
+          identifier, channelDataOffset, minorVersion, majorVersion, headerSize, channelCount, frameCount,
+          stepTime, fps, durationMs, flags, compressionTypeRaw, compressionType,
+          extCompressionBlockCount, compressionBlockCountLow, compressionBlockCount12,
+          effectiveCompressionBlockCount, sparseRangeCount, reserved,
+          uniqueId: uniqueId.toString(), uniqueIdPretty: formatMaybeMicros(uniqueId)
+        },
+        tables: { compressionBlocks, filteredCompressionBlocks, sparseRanges, variables },
+        parsing: { offsetAfterTables: offset, alignmentGap: alignGap, dataStart: adjustedOffset, parsedFrames: frames.length },
+        frames,
+        validations
+      };
+    }
+
+    function renderField(name, value) {
+      const div = document.createElement('div');
+      div.className = 'field';
+      div.innerHTML = '<div class="name">' + name + '</div><div class="val">' + value + '</div>';
+      return div;
+    }
+
+    function renderTable(container, columns, rows) {
+      if (!rows.length) {
+        container.innerHTML = '<div class="empty">No entries.</div>';
+        return;
+      }
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const trh = document.createElement('tr');
+      columns.forEach(c => {
+        const th = document.createElement('th');
+        th.textContent = c.label;
+        trh.appendChild(th);
+      });
+      thead.appendChild(trh);
+      table.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        columns.forEach(c => {
+          const td = document.createElement('td');
+          td.innerHTML = row[c.key] ?? '';
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      container.innerHTML = '';
+      container.appendChild(table);
+    }
+
+    function levelColor(level) {
+      return level === 'error' ? 'var(--danger)' : level === 'warn' ? 'var(--warning)' : 'var(--accent-2)';
+    }
+
+    function stopPlayback() {
+      state.isPlaying = false;
+      if (state.playTimer) {
+        clearInterval(state.playTimer);
+        state.playTimer = null;
+      }
+      if (state.audio && !state.audio.paused) {
+        state.audio.pause();
+      }
+      ui.playPause.textContent = 'Play';
+    }
+
+    function startPlayback() {
+      const parsed = state.parsed;
+      if (!parsed || !parsed.frames.length) return;
+      stopPlayback();
+      state.isPlaying = true;
+      ui.playPause.textContent = 'Pause';
+
+      const interval = Math.max(1, Number(parsed.header.stepTime) || 50);
+
+      if (state.audio) {
+        const targetTime = (state.currentFrame * interval) / 1000;
+        if (Math.abs(state.audio.currentTime - targetTime) > 0.15) {
+          state.audio.currentTime = targetTime;
+        }
+        state.audio.play().catch(() => {});
+        state.playTimer = setInterval(() => {
+          if (!state.audio) return;
+          const audioFrame = Math.floor((state.audio.currentTime * 1000) / interval);
+          renderFrame(Math.max(0, Math.min(parsed.frames.length - 1, audioFrame)));
+          if (state.audio.ended) stopPlayback();
+        }, Math.max(15, Math.min(interval, 50)));
+      } else {
+        state.playTimer = setInterval(() => {
+          const lastFrame = parsed.frames.length - 1;
+          renderFrame(state.currentFrame >= lastFrame ? 0 : state.currentFrame + 1);
+        }, interval);
+      }
+    }
+
+    function updateSyncStatus() {
+      if (state.audio) {
+        ui.syncStatus.textContent = 'Playback source: FSEQ + audio (' + (state.audioFileName || 'audio loaded') + ')';
+      } else {
+        ui.syncStatus.textContent = 'Playback source: FSEQ only';
+      }
+    }
+
+    function render(parsed) {
+      stopPlayback();
+      state.parsed = parsed;
+      state.currentFrame = 0;
+      ui.status.textContent = 'Loaded ' + parsed.fileName + ' • ' + formatBytes(parsed.fileSize);
+      updateSyncStatus();
+      ui.headerBadge.textContent = parsed.header.identifier + ' v' + parsed.header.majorVersion + '.' + parsed.header.minorVersion;
+      ui.statFormat.textContent = parsed.header.identifier + ' v' + parsed.header.majorVersion + '.' + parsed.header.minorVersion;
+      ui.statChannels.textContent = String(parsed.header.channelCount);
+      ui.statFrames.textContent = String(parsed.header.frameCount);
+      ui.statStep.textContent = parsed.header.stepTime + ' ms';
+      ui.statFps.textContent = parsed.header.fps ? parsed.header.fps.toFixed(2) : '0';
+      ui.statDuration.textContent = formatDuration(parsed.header.durationMs);
+
+      ui.headerFields.innerHTML = '';
+      [
+        ['Identifier', parsed.header.identifier],
+        ['Channel Data Offset', parsed.header.channelDataOffset],
+        ['Header Size', parsed.header.headerSize],
+        ['Channel Count', parsed.header.channelCount],
+        ['Frame Count', parsed.header.frameCount],
+        ['Step Time', parsed.header.stepTime + ' ms'],
+        ['FPS', parsed.header.fps ? parsed.header.fps.toFixed(4) : '0'],
+        ['Duration', formatDuration(parsed.header.durationMs)],
+        ['Flags', parsed.header.flags],
+        ['Compression Type', parsed.header.compressionType + ' (' + compressionName(parsed.header.compressionType) + ')'],
+        ['Compression Block Count (12-bit)', parsed.header.compressionBlockCount12],
+        ['Sparse Range Count', parsed.header.sparseRangeCount],
+        ['Reserved', parsed.header.reserved],
+        ['Unique ID / Creation Time', parsed.header.uniqueIdPretty],
+        ['File Size', formatBytes(parsed.fileSize)]
+      ].forEach(([name, value]) => ui.headerFields.appendChild(renderField(name, String(value))));
+
+      renderTable(ui.compressionBlocks,
+        [
+          { key: 'index', label: '#' },
+          { key: 'firstFrameNumber', label: 'First Frame' },
+          { key: 'size', label: 'Size' },
+          { key: 'relativeStart', label: 'Relative Start' },
+          { key: 'relativeEnd', label: 'Relative End' }
+        ],
+        parsed.tables.compressionBlocks.map(b => ({
+          index: b.index,
+          firstFrameNumber: b.firstFrameNumber,
+          size: b.size,
+          relativeStart: b.relativeStart ?? '—',
+          relativeEnd: b.relativeEnd ?? '—'
+        }))
+      );
+
+      renderTable(ui.sparseRanges,
+        [
+          { key: 'index', label: '#' },
+          { key: 'startChannel', label: 'Start Channel' },
+          { key: 'endChannelOffset', label: 'End Channel Offset' },
+          { key: 'inclusiveEndChannel', label: 'Implied End' },
+          { key: 'impliedChannelCount', label: 'Count' }
+        ],
+        parsed.tables.sparseRanges
+      );
+
+      renderTable(ui.variables,
+        [
+          { key: 'index', label: '#' },
+          { key: 'code', label: 'Code' },
+          { key: 'size', label: 'Size' },
+          { key: 'dataText', label: 'Value' },
+          { key: 'rawHex', label: 'Raw Hex' }
+        ],
+        parsed.tables.variables.map(v => ({
+          index: v.index,
+          code: v.code,
+          size: v.size,
+          dataText: v.error ? '<span class="error">' + escapeHtml(v.error) + '</span>' : escapeHtml(v.dataText),
+          rawHex: '<span class="mono">' + (v.rawHex || '') + '</span>'
+        }))
+      );
+
+      ui.validation.innerHTML = parsed.validations.map(v =>
+        '<div class="chip" style="border-color:' + levelColor(v.level) + ';color:' + levelColor(v.level) + ';">' + v.level.toUpperCase() + '</div>' +
+        '<div style="margin:-4px 0 12px 0;">' + escapeHtml(v.text) + '</div>'
+      ).join('');
+
+      ui.frameSlider.disabled = parsed.frames.length === 0;
+      ui.frameSlider.max = Math.max(0, parsed.frames.length - 1);
+      ui.frameSlider.value = 0;
+      ui.frameNumber.max = Math.max(0, parsed.frames.length - 1);
+      ui.frameNumber.value = 0;
+      ui.channelOffset.max = Math.max(0, parsed.header.channelCount - 1);
+      renderFrame(0);
+    }
+
+    function renderFrame(index) {
+      const parsed = state.parsed;
+      if (!parsed || !parsed.frames.length) {
+        ui.frameGrid.className = 'frame-grid heatmap';
+        ui.frameGrid.innerHTML = '';
+        ui.frameStats.textContent = parsed && parsed.header.compressionType !== 0
+          ? 'Frame bytes are unavailable because the file is compressed and decompression is not implemented yet.'
+          : 'No frame data available.';
+        ui.rawFrame.textContent = 'No frame loaded.';
+        ui.frameMeta.textContent = 'No frame selected';
+        return;
+      }
+
+      index = Math.max(0, Math.min(parsed.frames.length - 1, Number(index) || 0));
+      state.currentFrame = index;
+      ui.frameSlider.value = index;
+      ui.frameNumber.value = index;
+      if (state.audio && !state.syncLock && state.isPlaying === false) {
+        const intervalMs = Math.max(1, Number(parsed.header.stepTime) || 50);
+        const targetTime = (index * intervalMs) / 1000;
+        if (Math.abs(state.audio.currentTime - targetTime) > 0.15) {
+          state.syncLock = true;
+          state.audio.currentTime = targetTime;
+          state.syncLock = false;
+        }
+      }
+
+      const frame = parsed.frames[index];
+      const channelsPerView = Number(ui.channelsPerView.value) || 256;
+      const requestedStart = Number(ui.channelOffset.value) || 0;
+      const safeMaxStart = Math.max(0, frame.length - 1);
+      const startChannel = Math.max(0, Math.min(requestedStart, safeMaxStart));
+      ui.channelOffset.value = startChannel;
+      const endChannel = Math.min(frame.length, startChannel + channelsPerView);
+      const mode = ui.viewMode.value;
+      const visible = frame.slice(startChannel, endChannel);
+
+      let min = 255, max = 0, sum = 0, nonZero = 0;
+      if (!visible.length) { min = 0; max = 0; }
+      visible.forEach(v => {
+        if (v < min) min = v;
+        if (v > max) max = v;
+        sum += v;
+        if (v !== 0) nonZero++;
+      });
+      const avg = visible.length ? (sum / visible.length).toFixed(2) : '0.00';
+      ui.frameMeta.textContent = 'Frame ' + index + ' / ' + (parsed.frames.length - 1);
+      ui.frameStats.textContent = 'Showing channels ' + startChannel + '-' + Math.max(startChannel, endChannel - 1) + ' • ' + visible.length + ' values • min ' + min + ' • max ' + max + ' • avg ' + avg + ' • non-zero ' + nonZero;
+      ui.rawFrame.textContent = Array.from(visible).map(v => v.toString(16).padStart(2, '0')).join(' ');
+
+      ui.frameGrid.innerHTML = '';
+      ui.frameGrid.className = 'frame-grid ' + (mode === 'bars' ? 'bars' : mode === 'rgb' ? 'rgb' : 'heatmap');
+
+      if (mode === 'rgb') {
+        for (let i = 0; i < visible.length; i += 3) {
+          const r = visible[i] ?? 0;
+          const g = visible[i + 1] ?? 0;
+          const b = visible[i + 2] ?? 0;
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          cell.style.height = '36px';
+          cell.style.minWidth = '36px';
+          cell.style.background = 'rgb(' + r + ', ' + g + ', ' + b + ')';
+          cell.dataset.tip = 'Channels ' + (startChannel + i) + '-' + (startChannel + Math.min(i + 2, visible.length - 1)) + ': [' + r + ', ' + g + ', ' + b + ']';
+          ui.frameGrid.appendChild(cell);
+        }
+        return;
+      }
+
+      if (mode === 'bars') {
+        visible.forEach((value, i) => {
+          const cell = document.createElement('div');
+          cell.className = 'bar-cell';
+          cell.style.height = Math.max(6, Math.round((value / 255) * 96)) + 'px';
+          cell.style.background = valueColor(value);
+          cell.dataset.tip = 'Channel ' + (startChannel + i) + ': ' + value;
+          ui.frameGrid.appendChild(cell);
+        });
+        return;
+      }
+
+      visible.forEach((value, i) => {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.style.background = valueColor(value);
+        cell.dataset.tip = 'Channel ' + (startChannel + i) + ': ' + value;
+        ui.frameGrid.appendChild(cell);
+      });
+    }
+
+    async function handleAudioFile(file) {
+      state.audioFileName = file.name;
+      ui.selectedAudioName.textContent = file.name;
+      if (state.audioUrl) URL.revokeObjectURL(state.audioUrl);
+      state.audioUrl = URL.createObjectURL(file);
+      state.audio = new Audio(state.audioUrl);
+      state.audio.preload = 'auto';
+      state.audio.addEventListener('ended', () => stopPlayback());
+      state.audio.addEventListener('timeupdate', () => {
+        if (!state.isPlaying || !state.parsed || !state.parsed.frames.length) return;
+        const step = Math.max(1, Number(state.parsed.header.stepTime) || 50);
+        const frameIndex = Math.floor((state.audio.currentTime * 1000) / step);
+        renderFrame(Math.max(0, Math.min(state.parsed.frames.length - 1, frameIndex)));
+      });
+      updateSyncStatus();
+    }
+
+    async function handleFile(file) {
+      ui.selectedFileName.textContent = file.name;
+      state.fileName = file.name;
+      try {
+        const buf = await file.arrayBuffer();
+        const parsed = parseFSEQ(buf, file.name);
+        render(parsed);
+      } catch (err) {
+        ui.status.innerHTML = '<span class="error">' + escapeHtml(err.message || String(err)) + '</span>';
+      }
+    }
+
+    ui.audioInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) handleAudioFile(file);
+    });
+
+    ui.fileInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) handleFile(file);
+    });
+
+    ['dragenter', 'dragover'].forEach(ev => {
+      ui.dropzone.addEventListener(ev, (e) => {
+        e.preventDefault();
+        ui.dropzone.classList.add('dragover');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(ev => {
+      ui.dropzone.addEventListener(ev, (e) => {
+        e.preventDefault();
+        ui.dropzone.classList.remove('dragover');
+      });
+    });
+
+    ui.dropzone.addEventListener('drop', (e) => {
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) handleFile(file);
+    });
+
+    ui.frameSlider.addEventListener('input', () => { stopPlayback(); renderFrame(ui.frameSlider.value); });
+    ui.frameNumber.addEventListener('change', () => { stopPlayback(); renderFrame(ui.frameNumber.value); });
+    ui.prevFrame.addEventListener('click', () => { stopPlayback(); renderFrame(state.currentFrame - 1); });
+    ui.playPause.addEventListener('click', () => { state.isPlaying ? stopPlayback() : startPlayback(); });
+    ui.nextFrame.addEventListener('click', () => { stopPlayback(); renderFrame(state.currentFrame + 1); });
+    ui.channelsPerView.addEventListener('change', () => renderFrame(state.currentFrame));
+    ui.channelOffset.addEventListener('change', () => renderFrame(state.currentFrame));
+    ui.viewMode.addEventListener('change', () => renderFrame(state.currentFrame));
+
+    ui.downloadReport.addEventListener('click', () => {
+      if (!state.parsed) return;
+      const report = JSON.stringify(state.parsed, null, 2);
+      const blob = new Blob([report], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = (state.fileName || 'fseq') + '.report.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    document.addEventListener('keydown', (e) => {
+      const tag = (document.activeElement && document.activeElement.tagName) ? document.activeElement.tagName.toLowerCase() : '';
+      const isTyping = tag === 'input' || tag === 'textarea' || tag === 'select' || (document.activeElement && document.activeElement.isContentEditable);
+      if (isTyping) return;
+      if (!state.parsed) return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        state.isPlaying ? stopPlayback() : startPlayback();
+        return;
+      }
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        stopPlayback();
+        renderFrame(state.currentFrame - 1);
+        return;
+      }
+
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        stopPlayback();
+        renderFrame(state.currentFrame + 1);
+      }
+    });
+  </script>
+</body>
+</html>
